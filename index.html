@@ -18,39 +18,106 @@ button:hover{background:#10e7ff}
 </head>
 <body>
 
-<div class="card">
+<div id="login" class="card">
+<h2>Giriş Yap</h2>
+<button onclick="googleLogin()">Google ile Giriş</button><br>
+<button onclick="anonLogin()">Anonim Giriş</button>
+</div>
+
+<div id="panel" class="card" style="display:none">
 <h2>YS18 Drive Panel</h2>
 <input type="file" id="fileInput" multiple>
 <button onclick="upload()">⬆ Yükle</button>
 <div class="previewBox" id="preview"></div>
+<button onclick="logout()">Çıkış</button>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js"></script>
+
 <script>
+// Firebase config
+const firebaseConfig = {
+ apiKey: "AIzaSyAi8rVSmO-hE3yzhZZJzxbYyj1qVP8HyVI",
+ authDomain: "yusufstudio18shopier.firebaseapp.com",
+ databaseURL: "https://yusufstudio18shopier-default-rtdb.firebaseio.com",
+ projectId: "yusufstudio18shopier"
+};
+firebase.initializeApp(firebaseConfig);
+const auth=firebase.getAuth();
+const db=firebase.getDatabase();
+let currentUser=null;
+
+// Login
+function googleLogin(){
+ const provider=new firebase.GoogleAuthProvider();
+ firebase.signInWithPopup(auth,provider).then(res=>{
+   currentUser=res.user;
+   showPanel();
+ }).catch(console.log);
+}
+function anonLogin(){
+ firebase.signInAnonymously(auth).then(res=>{
+   currentUser=res.user;
+   showPanel();
+ });
+}
+
+function showPanel(){
+document.getElementById("login").style.display="none";
+document.getElementById("panel").style.display="block";
+loadFiles();
+}
+
+// Logout
+function logout(){firebase.signOut(auth);location.reload();}
+
+// Upload
 async function upload(){
-  const files=document.getElementById("fileInput").files;
-  const preview=document.getElementById("preview");
+ const files=document.getElementById("fileInput").files;
+ const preview=document.getElementById("preview");
 
-  for(let f of files){
-    let form=new FormData();
-    form.append("file", f);
+ for(let f of files){
+   let form=new FormData();
+   form.append("file",f);
+   form.append("uid",currentUser.uid);
 
-    const res=await fetch("http://localhost:3000/upload",{
-      method:"POST",
-      body: form
-    });
+   const res=await fetch("http://localhost:3000/upload",{method:"POST",body:form});
+   const data=await res.json();
+   if(data.link){
+     const div=document.createElement("div");
+     div.className="prevItem";
+     div.innerHTML=`<img src="${data.link}"><button class="delBtn" onclick='deleteFile("${data.key}","${data.driveId}",this)'>Sil</button>`;
+     preview.appendChild(div);
+   }
+ }
+}
 
-    const data=await res.json();
-    if(data.link){
-      const div=document.createElement("div");
-      div.className="prevItem";
-      let content="";
-      if(f.type.includes("image")) content=`<img src="${data.link}">`;
-      else if(f.type.includes("video")) content=`<video src="${data.link}" controls></video>`;
-      else content=`<p>${data.name}</p>`;
-      div.innerHTML=content+`<button class="delBtn" onclick="this.parentElement.remove()">Sil</button>`;
-      preview.appendChild(div);
-    }
-  }
+// Load user files
+function loadFiles(){
+ const preview=document.getElementById("preview");
+ const ref=db.ref("files/"+currentUser.uid);
+ ref.on('value',snap=>{
+   preview.innerHTML="";
+   snap.forEach(s=>{
+     const d=s.val();
+     const div=document.createElement("div");
+     div.className="prevItem";
+     div.innerHTML=`<img src="${d.link}"><button class="delBtn" onclick='deleteFile("${s.key}","${d.driveId}",this)'>Sil</button>`;
+     preview.appendChild(div);
+   });
+ });
+}
+
+// Delete
+async function deleteFile(key,driveId,btn){
+ await fetch("http://localhost:3000/delete",{
+   method:"POST",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({uid:currentUser.uid,key,driveId})
+ });
+ btn.parentElement.remove();
 }
 </script>
 </body>
